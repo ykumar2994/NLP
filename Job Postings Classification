@@ -1,1 +1,350 @@
-FAKE/REAL Job Postings Classification using NLP
+Python code: FAKE/REAL Job Postings Classification using NLP
+
+#!/usr/bin/env python
+# coding: utf-8
+
+# # Natural Language Processing 02 
+# 
+# # FINAL PROJECT
+# 
+# ## Author/develper:Yogesh Kumar 
+
+# # FAKE/REAL Job Postings Classification
+# # Creating dataframe  
+
+# In[1]:
+
+
+import numpy as np 
+import pandas as pd
+import matplotlib.pyplot as plt
+df = pd.read_csv('C:/Users/yogi/documents/fake_job_postings.csv')
+print(df.head(10))
+print(df.columns)
+
+
+# # Data Pre-Processing 
+
+# In[2]:
+
+
+#checking null values
+print(df.info())
+print(df.isnull().sum().sort_values())
+
+
+# In[3]:
+
+
+# filling null values them
+df.fillna('',inplace=True)
+df.isnull().sum().sort_values()
+
+
+# In[4]:
+
+
+df.describe()
+print(df.head(10))
+
+
+# In[5]:
+
+
+#taking only required field and merging them in single field
+df['text'] = df['description'] + " " + df['requirements']
+df['text'].head()
+df['text'][0]
+
+
+# In[6]:
+
+
+# Dropping unnecessary columns from dataframe
+print(df.columns)
+df.drop(columns=df.columns[0:len(df.columns)-2],inplace=True)
+print(df.head())
+
+
+# In[7]:
+
+
+#function to remove punctuation and digits from document
+
+import string
+import re
+
+print(string.punctuation)
+
+def remove_punction(text):
+    text_nonpunction=[]
+    for x in text:
+        text_nonpunction.append([re.sub('\d',"",char) for char in x if char not in string.punctuation])
+    return text_nonpunction
+
+df["clean_text"]=remove_punction(df["text"]) 
+
+print(df['clean_text'][0])
+
+
+# In[8]:
+
+
+# a function to combine all elements
+def remove_punct_combine(text):
+    comb_text=[]
+    for x in text:
+        comb_text.append("".join([char for char in x if char not in string.punctuation]))
+    return comb_text
+
+df['clean_text']=remove_punct_combine(df['clean_text'])
+print(df['clean_text'][0])
+
+
+# In[9]:
+
+
+# fucntion to tokenize Sentence
+get_ipython().system(' pip install nltk')
+import nltk
+from nltk.tokenize import word_tokenize
+def token_word(text):
+    sents=[]
+    for x in text:
+        sents.append(word_tokenize(x))
+    return sents
+df["token_word"]=token_word(df["clean_text"])
+print(df["token_word"][0])
+
+
+# In[10]:
+
+
+# function to remove stopword removed 
+from nltk.corpus import stopwords
+nltk.download('stopwords')
+from string import punctuation
+customStopWords = set(stopwords.words('english')+list(punctuation))
+
+def stop_word(text):
+    stop_words=[]
+    for x in text:
+        stop_words.append([word for word in x if word not in customStopWords])
+    return stop_words
+df['stop_word']=stop_word(df['token_word'])
+
+print(df['stop_word'][0])
+
+
+# In[11]:
+
+
+# function for stemming document
+ps = nltk.PorterStemmer()
+def stemming(tokenized_text):
+    st=[]
+    for x in tokenized_text:
+        st.append([ps.stem(word) for word in x])
+    return st
+    
+df['stemming']=stemming(df['stop_word'])
+
+print(df['stemming'][0])
+
+
+# In[12]:
+
+
+#function for lemmatization a document
+nltk.download('wordnet')
+wn = nltk.WordNetLemmatizer()
+def lemmatizing(tokenized_text):
+    lem=[]
+    for x in tokenized_text:
+        lem.append([wn.lemmatize(word) for word in x])
+    return lem
+
+df['lemmatize']=lemmatizing(df['stemming'])
+
+
+# In[13]:
+
+
+#function to create final document/text for vectorization
+def final_doc(text):
+    str=""
+    str+=" ".join(text)
+    return str
+
+df["full_doc"]=df['lemmatize'].apply(final_doc)
+
+#dropping previously created columns and retaining only final clean document/text for model
+df.drop(columns=df.columns[1:-1],inplace=True)
+print(df)
+
+
+# In[33]:
+
+
+# frequency of each word in document
+unq_val={}
+for x in df["full_doc"]:
+    for y in x.split(" "):
+        if y in unq_val:
+            unq_val[y]=unq_val[y]+1
+        else:
+            unq_val[y]=1   
+
+df_unique=pd.DataFrame(list(unq_val.items()),columns=['word','value'])
+
+#print(df_unique)
+    
+df_unique.sort_values(by='value')[-5:].plot(x="word", y="value", kind="bar",title='Top 5 repetitive words')
+
+
+# In[30]:
+
+
+#creating target and features and splitting them into train and test datasets
+from sklearn.model_selection import train_test_split
+
+X = df['full_doc']
+y = df['fraudulent']
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state = 33)
+
+
+# In[36]:
+
+
+#Vectorization using CountVectorizer
+from sklearn.feature_extraction.text import CountVectorizer
+
+cv=CountVectorizer(binary=False,ngram_range=(2,3))
+cv_train= cv.fit_transform(X_train)
+cv_test=cv.transform(X_test)
+print(cv_train.shape)
+print(cv_test.shape)
+print(cv_train[0:10])
+print(cv_test[0:10])
+
+
+# # Machine learning models implementation
+
+# In[35]:
+
+
+from sklearn.tree import DecisionTreeClassifier
+
+dt_model= DecisionTreeClassifier(criterion='entropy',max_depth=5)
+
+dt_model.fit(cv_train,y_train)
+
+dt_pred=dt_model.predict(X_test_tf)
+
+from sklearn.metrics import precision_score, recall_score, confusion_matrix, classification_report, accuracy_score, f1_score
+from sklearn.model_selection import cross_val_score
+
+acc1=accuracy_score(y_test,dt_pred)
+pre1=precision_score(y_test,dt_pred)
+
+print("Accuracy Score :",acc1)
+print("Precision Score :",pre1)
+
+import seaborn as sns
+sns.heatmap(confusion_matrix(y_test,dt_pred),annot=True, cmap='summer', cbar=False, linewidths=3, linecolor='r',square=True, xticklabels=['real','fake'],yticklabels=['real','fake'],fmt='.4g')
+plt.title('Confusion Matrix')
+print(classification_report(y_test,dt_pred))
+
+
+
+# In[18]:
+
+
+from sklearn.svm import SVC
+
+svc_model= SVC(kernel='sigmoid', gamma=1.0)
+svc_model.fit(cv_train,y_train)
+
+svc_pred=dt_model.predict(cv_test)
+acc2=accuracy_score(y_test,svc_pred)
+pre2=precision_score(y_test,svc_pred)
+print("Accuracy Score :",accuracy_score(y_test,svc_pred))
+print("Precision Score :",precision_score(y_test,svc_pred))
+
+import seaborn as sns
+plt.title('Confusion Matrix')
+sns.heatmap(confusion_matrix(y_test,svc_pred),annot=True, cmap='Blues', cbar=False, linewidths=3, linecolor='r', square=True, xticklabels=['real','fake'],yticklabels=['real','fake'],fmt='.4g')
+print(classification_report(y_test,svc_pred))
+
+
+# In[19]:
+
+
+from sklearn.naive_bayes import MultinomialNB
+
+mnb_model = MultinomialNB()
+
+mnb_model.fit(cv_train,y_train)
+
+mnb_pred=mnb_model.predict(cv_test)
+acc3=accuracy_score(y_test,mnb_pred)
+pre3=precision_score(y_test,mnb_pred)
+print("Accuracy Score :",accuracy_score(y_test,mnb_pred))
+print("Precision Score :",precision_score(y_test,mnb_pred))
+
+sns.heatmap(confusion_matrix(y_test,mnb_pred),annot=True, cmap='CMRmap', cbar=False, linewidths=3, linecolor='r', square=True, xticklabels=['real','fake'],yticklabels=['real','fake'],fmt='.4g')
+plt.title('Confusion Matrix')
+print(classification_report(y_test,mnb_pred))
+
+
+# In[20]:
+
+
+plt.figure(figsize=(14,6))
+models = ["decision Tree","Support Vector Classifier","MultinomailNB"]
+acc= [acc1,acc2,acc3]
+pre= [pre1,pre2,pre3]
+plt.bar(models,acc)
+plt.title('Accuracy of models')
+plt.xlabel('Models')
+plt.ylabel('Accuracy')
+plt.show()
+
+
+# In[21]:
+
+
+plt.figure(figsize=(14,6))
+plt.bar(models,pre,color='red')
+plt.title('Precision of models')
+plt.xlabel('Models')
+plt.ylabel('Precision')
+plt.show()
+
+
+# # Conclusion : I will choose Descision tree classifier as final model
+# After Training and predciting with Multiple algorithms on test data set, We can conclude that multinomial model have highest accuracy but less precision and decision tree model and SVM(Support Vector Classifier) model also have high accuracy with good precision score but SVM(Support Vector Classifier) have more processing time than decision tree model. we can choose decision   tree classifier as best algorithms to to sovle NLP problem, there are a couple of dvantages of using an descision tree classifier. Firstly, They are very fast and efficient compared to other classification algorithms. As decision trees are simple hence they require less effort for understanding an algorithm. The decision tree is one of the machine learning algorithms where we don’t worry about its feature scaling. 
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
